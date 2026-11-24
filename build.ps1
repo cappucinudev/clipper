@@ -6,24 +6,35 @@ $out = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force $out | Out-Null
 Get-Process Clipper -ErrorAction SilentlyContinue | Stop-Process -Force
 
-# App icon: purple rounded square with a white play triangle.
+# App icon: assets\icon.png packed into a multi-size .ico (PNG entries, Vista+).
 $ico = Join-Path $out 'app.ico'
 Add-Type -AssemblyName System.Drawing
-$bmp = New-Object System.Drawing.Bitmap 64, 64
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.SmoothingMode = 'AntiAlias'
-$path = New-Object System.Drawing.Drawing2D.GraphicsPath
-$r = 16
-$path.AddArc(0, 0, $r, $r, 180, 90); $path.AddArc(63 - $r, 0, $r, $r, 270, 90)
-$path.AddArc(63 - $r, 63 - $r, $r, $r, 0, 90); $path.AddArc(0, 63 - $r, $r, $r, 90, 90)
-$g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(109, 93, 252))), $path)
-$g.FillPolygon([System.Drawing.Brushes]::White, [System.Drawing.Point[]]@((New-Object System.Drawing.Point 24, 18), (New-Object System.Drawing.Point 48, 32), (New-Object System.Drawing.Point 24, 46)))
-$fs = [System.IO.File]::Create($ico)
-[System.Drawing.Icon]::FromHandle($bmp.GetHicon()).Save($fs)
-$fs.Close()
+$src = [System.Drawing.Image]::FromFile((Join-Path $root 'assets\icon.png'))
+$sizes = 256, 64, 48, 32, 16
+$pngs = foreach ($n in $sizes) {
+  $b = New-Object System.Drawing.Bitmap $n, $n
+  $g = [System.Drawing.Graphics]::FromImage($b)
+  $g.InterpolationMode = 'HighQualityBicubic'
+  $g.DrawImage($src, 0, 0, $n, $n)
+  $m = New-Object System.IO.MemoryStream
+  $b.Save($m, [System.Drawing.Imaging.ImageFormat]::Png)
+  ,$m.ToArray()
+}
+$src.Dispose()
+$w = New-Object System.IO.BinaryWriter ([System.IO.File]::Create($ico))
+$w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$sizes.Count)
+$offset = 6 + 16 * $sizes.Count
+for ($i = 0; $i -lt $sizes.Count; $i++) {
+  $n = $sizes[$i] % 256
+  $w.Write([byte]$n); $w.Write([byte]$n); $w.Write([byte]0); $w.Write([byte]0)
+  $w.Write([uint16]1); $w.Write([uint16]32); $w.Write([uint32]$pngs[$i].Length); $w.Write([uint32]$offset)
+  $offset += $pngs[$i].Length
+}
+foreach ($p in $pngs) { $w.Write($p) }
+$w.Close()
 
 & $csc /nologo /target:winexe /optimize+ /out:"$out\Clipper.exe" /win32icon:"$ico" `
-  /resource:"$root\ui\index.html,index.html" `
+  /resource:"$root\ui\index.html,index.html" /resource:"$root\assets\icon.png,icon.png" `
   /r:System.Web.Extensions.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll `
   "$root\src\Clipper.cs"
 if ($LASTEXITCODE) { exit $LASTEXITCODE }

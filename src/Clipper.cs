@@ -163,6 +163,7 @@ static class App
         try
         {
             if (path == "/" || path == "/index.html") { SendBytes(res, "text/html; charset=utf-8", Page()); return; }
+            if (path == "/icon.png") { SendBytes(res, "image/png", Resource("icon.png")); return; }
             if (req.QueryString["t"] != Token && req.Headers["X-Token"] != Token) { res.StatusCode = 403; res.Close(); return; }
             var q = req.QueryString;
             switch (path)
@@ -277,7 +278,12 @@ static class App
         // Dev: a ui/index.html next to the exe wins, so the page can change without a rebuild.
         foreach (var p in new[] { Path.Combine(ExeDir, "ui\\index.html"), Path.Combine(ExeDir, "..\\ui\\index.html") })
             if (File.Exists(p)) return File.ReadAllBytes(p);
-        using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("index.html"))
+        return Resource("index.html");
+    }
+
+    static byte[] Resource(string name)
+    {
+        using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
         using (var m = new MemoryStream()) { s.CopyTo(m); return m.ToArray(); }
     }
 

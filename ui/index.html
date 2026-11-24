@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Clipper</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236d5dfc'/%3E%3Cpath d='M12 9l12 7-12 7z' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" href="/icon.png">
 <style>
   :root {
     --bg: #0e0f12; --panel: #16171c; --panel2: #1d1f25; --line: #2a2c34;
@@ -27,8 +27,7 @@
   kbd { font: 11px Consolas, monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
 
   header { height: 50px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); }
-  .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: grid; place-items: center; }
-  .logo::after { content: ""; border-left: 8px solid #fff; border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin-left: 2px; }
+  .logo { width: 26px; height: 26px; border-radius: 7px; display: block; }
   header b { font-size: 14px; }
   #fileName { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 
@@ -100,7 +99,7 @@
 <body>
 <div id="banner">ffmpeg not found. Install it with <code>winget install Gyan.FFmpeg</code>, or put ffmpeg.exe and ffprobe.exe next to Clipper.exe, then restart.</div>
 <header>
-  <div class="logo"></div><b>Clipper</b>
+  <img class="logo" src="/icon.png" alt=""><b>Clipper</b>
   <span id="fileName"></span>
   <button id="openBtn" title="Ctrl+O">Open video</button>
 </header>
