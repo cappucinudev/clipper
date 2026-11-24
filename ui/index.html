@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clipper</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236d5dfc'/%3E%3Cpath d='M12 9l12 7-12 7z' fill='white'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0e0f12; --panel: #16171c; --panel2: #1d1f25; --line: #2a2c34;
+    --text: #ececef; --muted: #8d8f99; --accent: #6d5dfc; --accent2: #8b7dff; --ok: #3ecf8e; --bad: #ff6b6b;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 13px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text);
+         display: flex; flex-direction: column; overflow: hidden; user-select: none; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel2); border-radius: 8px; padding: 6px 12px; }
+  button:hover:not(:disabled) { border-color: #444754; }
+  button:disabled { opacity: .45; cursor: default; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .primary:hover:not(:disabled) { background: var(--accent2); border-color: var(--accent2); }
+  .ghost { background: none; border-color: transparent; color: var(--muted); padding: 4px 8px; }
+  .ghost:hover:not(:disabled) { color: var(--text); border-color: transparent; }
+  input[type=text], input[type=number] { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; outline: none; user-select: text; }
+  input:focus { border-color: var(--accent); }
+  kbd { font: 11px Consolas, monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+
+  header { height: 50px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+  .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: grid; place-items: center; }
+  .logo::after { content: ""; border-left: 8px solid #fff; border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin-left: 2px; }
+  header b { font-size: 14px; }
+  #fileName { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+  main { flex: 1; display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
+  #left { display: flex; flex-direction: column; min-width: 0; padding: 16px; gap: 12px; }
+  #right { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+
+  #empty { flex: 1; border: 2px dashed var(--line); border-radius: 14px; display: grid; place-items: center; text-align: center; cursor: pointer; }
+  #empty:hover, body.dragging #empty { border-color: var(--accent); background: #6d5dfc0d; }
+  #empty h2 { font-size: 18px; margin: 12px 0 4px; font-weight: 600; }
+  #empty p { color: var(--muted); margin: 0 0 16px; }
+  .bigicon { width: 56px; height: 56px; border-radius: 16px; background: var(--panel2); border: 1px solid var(--line); display: inline-grid; place-items: center; font-size: 26px; }
+
+  #viewer { flex: 1; min-height: 0; background: #000; border-radius: 12px; position: relative; display: grid; place-items: center; overflow: hidden; }
+  #viewer video { max-width: 100%; max-height: 100%; display: block; }
+  #noPreview { position: absolute; inset: 0; display: none; place-items: center; color: var(--muted); text-align: center; padding: 20px; }
+  body.dragging #viewer { outline: 2px dashed var(--accent); outline-offset: -2px; }
+
+  .bar { display: flex; align-items: center; gap: 8px; }
+  #playBtn { width: 36px; height: 32px; padding: 0; font-size: 14px; }
+  .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 120px; }
+  #timeline { position: relative; height: 46px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; touch-action: none; }
+  #sel { position: absolute; top: 0; bottom: 0; background: #6d5dfc33; border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent); pointer-events: none; }
+  .handle { position: absolute; top: -1px; bottom: -1px; width: 12px; margin-left: -6px; background: var(--accent); border-radius: 4px; cursor: ew-resize; z-index: 2; }
+  .handle::after { content: ""; position: absolute; left: 5px; top: 14px; bottom: 14px; width: 2px; background: #fff9; border-radius: 1px; }
+  #head { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #fff; pointer-events: none; z-index: 3; }
+  .trimrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .trimrow input { width: 92px; text-align: center; font-variant-numeric: tabular-nums; }
+  .trimrow .len { margin-left: auto; color: var(--muted); }
+  .trimrow .len b { color: var(--text); }
+
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: 0; background: none; padding: 9px; border-radius: 8px; color: var(--muted); font-weight: 600; }
+  .tabs button.on { background: var(--panel2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+  #opts { flex: 1; overflow-y: auto; padding: 4px 16px 16px; }
+  .group { margin-top: 16px; }
+  .group > label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 7px; font-weight: 600; }
+  .group > label.switch { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); font-weight: 400; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { padding: 6px 10px; border-radius: 8px; }
+  .seg button.on { border-color: var(--accent); background: #6d5dfc22; color: #fff; }
+  .seg button small { color: var(--muted); margin-left: 3px; }
+  .seg input { width: 70px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .switch { display: flex !important; align-items: center; gap: 8px; cursor: pointer; }
+  .switch input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+  #foot { border-top: 1px solid var(--line); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  #estimate { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  #estimate b { font-size: 18px; white-space: nowrap; }
+  #estimate span { color: var(--muted); text-align: right; }
+  .saveto { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .saveto .dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--muted); }
+  .namerow { display: flex; gap: 6px; align-items: center; }
+  .namerow input { flex: 1; min-width: 0; }
+  .namerow span { color: var(--muted); }
+  #exportBtn { padding: 11px; font-size: 14px; border-radius: 10px; }
+  .progress { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+  .progress div { height: 100%; width: 0; background: var(--accent); }
+  #status { color: var(--muted); font-size: 12px; min-height: 17px; }
+  #status.bad { color: var(--bad); white-space: pre-wrap; user-select: text; max-height: 120px; overflow: auto; }
+  #result { display: none; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; gap: 8px; flex-direction: column; }
+  #result .ok { color: var(--ok); font-weight: 600; word-break: break-all; }
+  #result .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  #banner { display: none; background: #ff6b6b1a; color: var(--bad); padding: 8px 16px; border-bottom: 1px solid #ff6b6b44; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+<div id="banner">ffmpeg not found. Install it with <code>winget install Gyan.FFmpeg</code>, or put ffmpeg.exe and ffprobe.exe next to Clipper.exe, then restart.</div>
+<header>
+  <div class="logo"></div><b>Clipper</b>
+  <span id="fileName"></span>
+  <button id="openBtn" title="Ctrl+O">Open video</button>
+</header>
+
+<main>
+  <section id="left">
+    <div id="empty">
+      <div>
+        <div class="bigicon">🎬</div>
+        <h2>Drop a video here</h2>
+        <p>or click to browse. Trim it, shrink it, or turn it into a GIF.</p>
+        <button class="primary">Open video</button>
+      </div>
+    </div>
+
+    <div id="viewer" class="hide">
+      <video id="vid" preload="auto"></video>
+      <div id="noPreview">No preview for this format.<br>Trimming and export still work: type the times below.</div>
+    </div>
+
+    <div id="transport" class="hide">
+      <div class="bar">
+        <button id="playBtn" title="Space">▶</button>
+        <span class="time" id="clock">0:00.0 / 0:00.0</span>
+        <button class="ghost" id="playSelBtn" title="P">▶ Play selection</button>
+        <span style="flex:1"></span>
+        <span class="note"><kbd>I</kbd> <kbd>O</kbd> set start/end · <kbd>←</kbd><kbd>→</kbd> step</span>
+      </div>
+      <div id="timeline" style="margin-top:10px">
+        <div id="sel"></div>
+        <div class="handle" id="hIn" title="Start"></div>
+        <div class="handle" id="hOut" title="End"></div>
+        <div id="head"></div>
+      </div>
+      <div class="trimrow" style="margin-top:10px">
+        <button id="setIn">Start here <kbd>I</kbd></button>
+        <input type="text" id="inTime" title="Start time">
+        <span class="note">to</span>
+        <input type="text" id="outTime" title="End time">
+        <button id="setOut">End here <kbd>O</kbd></button>
+        <button class="ghost" id="resetTrim">Reset</button>
+        <span class="len">Clip <b id="clipLen">0:00</b></span>
+      </div>
+    </div>
+  </section>
+
+  <aside id="right">
+    <div class="tabs">
+      <button data-mode="video" class="on">🎞 Video</button>
+      <button data-mode="gif">✨ GIF</button>
+    </div>
+
+    <div id="opts">
+      <div id="videoOpts">
+        <div class="group">
+          <label>Goal</label>
+          <div class="seg" data-key="goal">
+            <button data-v="size">Fit a size</button>
+            <button data-v="quality">Best quality</button>
+            <button data-v="trim">Trim only</button>
+          </div>
+          <div class="note" id="goalNote"></div>
+        </div>
+        <div class="group" data-show="goal=size">
+          <label>Target size</label>
+          <div class="seg" data-key="sizeMB">
+            <button data-v="8">8 MB</button>
+            <button data-v="10">10 MB<small>Discord</small></button>
+            <button data-v="25">25 MB</button>
+            <button data-v="50">50 MB</button>
+            <button data-v="100">100 MB</button>
+            <input type="number" id="customMB" min="1" placeholder="MB" title="Custom size in MB">
+          </div>
+        </div>
+        <div class="group" data-show="goal=quality">
+          <label>Quality</label>
+          <div class="seg" data-key="quality">
+            <button data-v="high">High</button>
+            <button data-v="balanced">Balanced</button>
+            <button data-v="small">Smaller</button>
+          </div>
+        </div>
+        <div class="group" data-show="goal!=trim">
+          <label>Resolution</label>
+          <div class="seg" data-key="res">
+            <button data-v="auto">Auto</button>
+            <button data-v="0">Original</button>
+            <button data-v="1080">1080p</button>
+            <button data-v="720">720p</button>
+            <button data-v="480">480p</button>
+            <button data-v="360">360p</button>
+          </div>
+          <div class="note" id="resNote"></div>
+        </div>
+        <div class="group" data-show="goal!=trim">
+          <label>Frame rate</label>
+          <div class="seg" data-key="fps">
+            <button data-v="0">Original</button>
+            <button data-v="60">60</button>
+            <button data-v="30">30</button>
+            <button data-v="24">24</button>
+          </div>
+        </div>
+        <div class="group" data-show="goal!=trim">
+          <label class="switch"><input type="checkbox" id="audioChk"> Keep audio</label>
+        </div>
+      </div>
+
+      <div id="gifOpts" class="hide">
+        <div class="group">
+          <label>Width</label>
+          <div class="seg" data-key="gw">
+            <button data-v="320">320</button>
+            <button data-v="480">480</button>
+            <button data-v="640">640</button>
+            <button data-v="800">800</button>
+            <button data-v="0">Original</button>
+          </div>
+        </div>
+        <div class="group">
+          <label>Frame rate</label>
+          <div class="seg" data-key="gfps">
+            <button data-v="10">10</button>
+            <button data-v="15">15</button>
+            <button data-v="20">20</button>
+            <button data-v="25">25</button>
+            <button data-v="30">30</button>
+          </div>
+        </div>
+        <div class="group">
+          <label>Colors</label>
+          <div class="seg" data-key="gcolors">
+            <button data-v="256">256<small>best</small></button>
+            <button data-v="128">128</button>
+            <button data-v="64">64</button>
+            <button data-v="32">32<small>tiny</small></button>
+          </div>
+        </div>
+        <div class="group">
+          <label>Speed</label>
+          <div class="seg" data-key="gspeed">
+            <button data-v="0.5">0.5×</button>
+            <button data-v="1">1×</button>
+            <button data-v="1.5">1.5×</button>
+            <button data-v="2">2×</button>
+          </div>
+        </div>
+        <div class="group">
+          <label class="switch"><input type="checkbox" id="ditherChk"> Smooth gradients (dither)</label>
+          <label class="switch" style="margin-top:8px"><input type="checkbox" id="loopChk"> Loop forever</label>
+          <label class="switch" style="margin-top:8px"><input type="checkbox" id="bounceChk"> Boomerang (forward, then back)</label>
+        </div>
+        <div class="note" id="gifNote"></div>
+      </div>
+    </div>
+
+    <div id="foot">
+      <div id="estimate"><b id="estSize">–</b><span id="estDetail"></span></div>
+      <div class="saveto">
+        <span>📁</span><span class="dir" id="saveDir"></span>
+        <button class="ghost" id="followBtn" title="Save next to the original video">↺ Video's folder</button>
+        <button id="changeDir">Change…</button>
+      </div>
+      <div class="namerow"><input type="text" id="outName" spellcheck="false"><span id="outExt">.mp4</span></div>
+      <button class="primary" id="exportBtn" disabled>Export</button>
+      <div class="progress hide" id="prog"><div></div></div>
+      <div id="status"></div>
+      <div id="result">
+        <div class="ok" id="resultText"></div>
+        <div class="btns">
+          <button id="revealBtn">Show in folder</button>
+          <button id="launchBtn">Play</button>
+          <button class="ghost" id="reopenBtn">Load it here</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+const vid = $('vid');
+
+async function api(path, params, body) {
+  const qs = new URLSearchParams(params || {});
+  const r = await fetch(path + (qs.toString() ? '?' + qs : ''), {
+    method: body === undefined ? 'GET' : 'POST', headers: { 'X-Token': TOKEN }, body,
+  });
+  if (!r.ok) throw new Error(await r.text() || r.statusText);
+  return r.json();
+}
+
+// ---------- Settings (remembered between runs) ----------
+const DEFAULTS = {
+  mode: 'video', saveDir: '', openDir: '',
+  goal: 'size', sizeMB: '10', quality: 'balanced', res: 'auto', fps: '0', audio: true,
+  gw: '480', gfps: '15', gcolors: '256', gspeed: '1', dither: true, loop: true, bounce: false,
+};
+let S = { ...DEFAULTS };
+let saveTimer = 0;
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => api('/api/settings', null, JSON.stringify(S)).catch(() => {}), 400);
+}
+
+// ---------- Source video ----------
+let src = null;
+let inT = 0, outT = 0, nameEdited = false, videosDir = '', busy = false, hasFfmpeg = false;
+
+const dirname = p => p.replace(/[\\/][^\\/]*$/, '');
+const basename = p => p.replace(/^.*[\\/]/, '');
+const stem = n => n.replace(/\.[^.]+$/, '');
+const mb = b => b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+
+function fmt(t, withMs = true) {
+  t = Math.max(0, t || 0);
+  const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60;
+  const ss = withMs ? s.toFixed(1).padStart(4, '0') : String(Math.floor(s)).padStart(2, '0');
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + ss;
+}
+function parseTime(str) {
+  const parts = String(str).trim().split(':').map(Number);
+  if (!parts.length || parts.some(isNaN)) return NaN;
+  return parts.reduce((a, v) => a * 60 + v, 0);
+}
+function rate(r) { const [a, b] = String(r || '0/1').split('/').map(Number); return b ? a / b : a; }
+
+async function load(path, temp) {
+  setStatus('Reading video…');
+  let info;
+  try { info = await api('/api/probe', { path }); } catch (e) { return setStatus(e.message, true); }
+  let p;
+  try { p = JSON.parse(info.probe); } catch { p = {}; }
+  const streams = p.streams || [];
+  const v = streams.find(s => s.codec_type === 'video');
+  if (!v) return setStatus("That file isn't a video Clipper can read.", true);
+  let w = v.width, h = v.height;
+  const sd = (v.side_data_list || []).find(d => d.rotation !== undefined);
+  const rot = Math.abs(+(sd ? sd.rotation : (v.tags || {}).rotate) || 0);
+  if (rot === 90 || rot === 270) [w, h] = [h, w];
+  src = {
+    path, temp, name: basename(path), dir: dirname(path), size: info.size,
+    dur: +(p.format || {}).duration || +v.duration || 0, w, h,
+    fps: rate(v.avg_frame_rate) || rate(v.r_frame_rate) || 30,
+    audio: streams.some(s => s.codec_type === 'audio'),
+  };
+  inT = 0; outT = src.dur; nameEdited = false;
+  if (!temp) { S.openDir = src.dir; persist(); }
+
+  $('empty').classList.add('hide');
+  $('viewer').classList.remove('hide');
+  $('transport').classList.remove('hide');
+  $('fileName').textContent = `${src.name}  ·  ${src.w}×${src.h}  ·  ${Math.round(src.fps)} fps  ·  ${fmt(src.dur, false)}  ·  ${mb(src.size)}`;
+  $('noPreview').style.display = 'none';
+  vid.style.display = '';
+  vid.src = '/media?' + new URLSearchParams({ t: TOKEN, path });
+  $('result').style.display = 'none';
+  setStatus(temp && !S.saveDir ? "Couldn't find where the dropped file lives, so it saves to your Videos folder." : '');
+  renderTrim(); render(); renderHead();
+}
+
+vid.addEventListener('error', () => {
+  if (!src) return;
+  vid.style.display = 'none';
+  $('noPreview').style.display = 'grid';
+});
+
+// ---------- Open / drop / hand-off from a second launch ----------
+async function openDialog() {
+  if (busy) return;
+  const r = await api('/api/open', { dir: S.openDir || '' }, '');
+  if (r.path) load(r.path, false);
+}
+$('openBtn').onclick = openDialog;
+$('empty').onclick = openDialog;
+
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', async e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
+  const f = e.dataTransfer.files[0];
+  if (!f || busy) return;
+  setStatus('Finding ' + f.name + '…');
+  const hit = await api('/api/locate', { name: f.name, size: f.size }).catch(() => ({}));
+  if (hit.path) return load(hit.path, false);
+  setStatus('Copying ' + f.name + '…');
+  const up = await api('/api/upload', { name: f.name }, f);
+  load(up.path, true);
+});
+
+async function checkPending() {
+  const r = await api('/api/pending').catch(() => ({}));
+  if (r.path && !busy) load(r.path, false);
+}
+addEventListener('focus', checkPending);
+setInterval(() => api('/api/ping').catch(() => {}), 10000);
+
+// ---------- Playback + timeline ----------
+const tl = $('timeline');
+const pct = t => (src && src.dur ? t / src.dur * 100 : 0) + '%';
+
+function renderTrim() {
+  if (!src) return;
+  $('sel').style.left = pct(inT);
+  $('sel').style.width = (src.dur ? (outT - inT) / src.dur * 100 : 0) + '%';
+  $('hIn').style.left = pct(inT);
+  $('hOut').style.left = pct(outT);
+  if (document.activeElement !== $('inTime')) $('inTime').value = fmt(inT);
+  if (document.activeElement !== $('outTime')) $('outTime').value = fmt(outT);
+  $('clipLen').textContent = fmt(outT - inT);
+}
+let stopAtOut = false;
+function renderHead() {
+  $('head').style.left = pct(vid.currentTime);
+  $('clock').textContent = fmt(vid.currentTime) + ' / ' + fmt(src ? src.dur : 0);
+  $('playBtn').textContent = vid.paused ? '▶' : '❚❚';
+}
+vid.addEventListener('timeupdate', () => {
+  if (stopAtOut && vid.currentTime >= outT) { vid.pause(); stopAtOut = false; }
+  renderHead();
+});
+['play', 'pause', 'seeked'].forEach(ev => vid.addEventListener(ev, renderHead));
+
+function togglePlay() { if (vid.paused) vid.play().catch(() => {}); else { vid.pause(); stopAtOut = false; } }
+function playSelection() { vid.currentTime = inT; stopAtOut = true; vid.play().catch(() => {}); }
+$('playBtn').onclick = togglePlay;
+$('playSelBtn').onclick = playSelection;
+vid.onclick = togglePlay;
+
+function setIn(t) { inT = Math.min(Math.max(0, t), outT - 0.1); renderTrim(); render(); }
+function setOut(t) { outT = Math.max(Math.min(src.dur, t), inT + 0.1); renderTrim(); render(); }
+$('setIn').onclick = () => setIn(vid.currentTime);
+$('setOut').onclick = () => setOut(vid.currentTime);
+$('resetTrim').onclick = () => { inT = 0; outT = src.dur; renderTrim(); render(); };
+$('inTime').onchange = e => { const t = parseTime(e.target.value); if (!isNaN(t)) setIn(t); e.target.blur(); renderTrim(); };
+$('outTime').onchange = e => { const t = parseTime(e.target.value); if (!isNaN(t)) setOut(t); e.target.blur(); renderTrim(); };
+
+function timeAt(e) {
+  const r = tl.getBoundingClientRect();
+  return Math.min(Math.max(0, (e.clientX - r.left) / r.width), 1) * src.dur;
+}
+let dragging = null;
+tl.addEventListener('pointerdown', e => {
+  if (!src || busy) return;
+  dragging = e.target.id === 'hIn' ? 'in' : e.target.id === 'hOut' ? 'out' : 'seek';
+  tl.setPointerCapture(e.pointerId);
+  move(e);
+});
+tl.addEventListener('pointermove', e => { if (dragging) move(e); });
+tl.addEventListener('pointerup', () => { dragging = null; });
+function move(e) {
+  const t = timeAt(e);
+  if (dragging === 'in') setIn(t);
+  else if (dragging === 'out') setOut(t);
+  if (vid.readyState) vid.currentTime = t;
+  else $('head').style.left = pct(t);
+}
+
+addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key.toLowerCase() === 'o') { e.preventDefault(); return openDialog(); }
+  if (!src || e.target.tagName === 'INPUT' || busy) return;
+  const step = e.shiftKey ? 1 / src.fps : 1;
+  switch (e.key.toLowerCase()) {
+    case ' ': e.preventDefault(); togglePlay(); break;
+    case 'i': setIn(vid.currentTime); break;
+    case 'o': setOut(vid.currentTime); break;
+    case 'p': playSelection(); break;
+    case 'arrowleft': vid.currentTime = Math.max(0, vid.currentTime - step); break;
+    case 'arrowright': vid.currentTime = Math.min(src.dur, vid.currentTime + step); break;
+    case 'enter': if (!$('exportBtn').disabled) exportIt(); break;
+  }
+});
+
+// ---------- Options ----------
+const seg = key => document.querySelector(`.seg[data-key="${key}"]`);
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; nameEdited = false; persist(); render(); });
+document.querySelectorAll('.seg[data-key]').forEach(el => {
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    S[el.dataset.key] = b.dataset.v;
+    if (el.dataset.key === 'sizeMB') $('customMB').value = '';
+    if (el.dataset.key === 'goal') nameEdited = false;
+    persist(); render();
+  });
+});
+$('customMB').oninput = e => { if (+e.target.value > 0) { S.sizeMB = String(+e.target.value); persist(); render(); } };
+const checks = { audioChk: 'audio', ditherChk: 'dither', loopChk: 'loop', bounceChk: 'bounce' };
+for (const [id, key] of Object.entries(checks)) $(id).onchange = e => { S[key] = e.target.checked; persist(); render(); };
+$('outName').oninput = () => { nameEdited = true; };
+
+const CRF = { high: 19, balanced: 23, small: 28 };
+const clipDur = () => Math.max(0.1, outT - inT);
+
+// "Auto" lowers the height when the bitrate is too thin to look good at the source size.
+function outHeight(vb) {
+  let h = src.h;
+  if (S.res === 'auto') {
+    if (S.goal === 'size') h = Math.min(src.h, vb >= 5e6 ? 1080 : vb >= 2.2e6 ? 720 : vb >= 1e6 ? 480 : vb >= 0.45e6 ? 360 : 240);
+    else h = Math.min(src.h, 1080);
+  } else if (+S.res) h = Math.min(src.h, +S.res);
+  return Math.round(h / 2) * 2;
+}
+const outWidth = h => Math.round(src.w * h / src.h / 2) * 2;
+
+// Builds the ffmpeg passes for the current settings. '@OUT' becomes the output path.
+function plan() {
+  const d = clipDur();
+  const ss = inT.toFixed(3), t = d.toFixed(3);
+  const out = { passes: [], total: d, ext: '.mp4', est: 0, detail: '' };
+
+  if (S.mode === 'gif') {
+    const sp = +S.gspeed;
+    const w = +S.gw && +S.gw < src.w ? +S.gw : src.w;
+    const h = Math.round(src.h * w / src.w);
+    const fps = Math.min(+S.gfps, Math.round(src.fps) || 30);
+    let chain = `fps=${fps},scale=${w}:-1:flags=lanczos`;
+    if (sp !== 1) chain = `setpts=PTS/${sp},` + chain;
+    let fc = `[0:v]${chain}[v]`;
+    if (S.bounce) fc += ';[v]split[f][r];[r]reverse[rv];[f][rv]concat=n=2:v=1[v]';
+    fc += `;[v]split[a][b];[a]palettegen=max_colors=${S.gcolors}:stats_mode=diff[p];[b][p]paletteuse=dither=${S.dither ? 'sierra2_4a' : 'none'}:diff_mode=rectangle`;
+    out.passes.push(['-ss', ss, '-t', t, '-i', src.path, '-filter_complex', fc, '-loop', S.loop ? '0' : '-1', '@OUT']);
+    out.ext = '.gif';
+    out.total = d / sp * (S.bounce ? 2 : 1);
+    const frames = out.total * fps;
+    // Rough bytes per pixel per frame after GIF compression.
+    out.est = frames * w * h * (S.dither ? 0.16 : 0.09) * (0.55 + 0.45 * (+S.gcolors / 256));
+    out.detail = `${w}×${h} · ${fps} fps · ${Math.round(frames)} frames`;
+    return out;
+  }
+
+  if (S.goal === 'trim') {
+    out.ext = (src.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
+    out.passes.push(['-ss', ss, '-i', src.path, '-t', t, '-map', '0:v:0', '-map', '0:a?', '-c', 'copy', '-avoid_negative_ts', 'make_zero', '@OUT']);
+    out.est = src.size * d / src.dur;
+    out.detail = 'Same quality · cuts at the nearest keyframe';
+    return out;
+  }
+
+  const ab = S.audio && src.audio ? 128000 : 0;
+  const fps = +S.fps && +S.fps < src.fps - 0.5 ? +S.fps : 0;
+  const vfps = fps ? ['-r', String(fps)] : [];
+  const audio = ab ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '128k'] : ['-an'];
+  const head = ['-ss', ss, '-i', src.path, '-t', t, '-map', '0:v:0'];
+  const tail = ['-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
+
+  if (S.goal === 'size') {
+    const vb = Math.max(120000, Math.floor(+S.sizeMB * 1048576 * 8 * 0.96 / d - ab));
+    const h = outHeight(vb);
+    const vf = h < src.h ? ['-vf', `scale=-2:${h}:flags=lanczos`] : [];
+    const enc = ['-c:v', 'libx264', '-preset', 'medium', '-b:v', String(vb)];
+    out.passes.push([...head, ...vf, ...vfps, ...enc, '-pass', '1', '-passlogfile', 'clipper2pass', '-an', '-pix_fmt', 'yuv420p', '-f', 'mp4', 'NUL']);
+    out.passes.push([...head, ...vf, ...vfps, ...enc, '-maxrate', String(Math.floor(vb * 1.5)), '-bufsize', String(vb * 2),
+      '-pass', '2', '-passlogfile', 'clipper2pass', ...audio, ...tail, '@OUT']);
+    out.est = (vb + ab) * d / 8;
+    out.detail = `${outWidth(h)}×${h} · ${(vb / 1e6).toFixed(2)} Mbps`;
+    out.h = h;
+    if (out.est >= src.size * d / src.dur) out.warn = 'The clip is already under that size. Pick a smaller size or use Best quality.';
+    return out;
+  }
+
+  const h = outHeight(0);
+  const vf = h < src.h ? ['-vf', `scale=-2:${h}:flags=lanczos`] : [];
+  out.passes.push([...head, ...vf, ...vfps, '-c:v', 'libx264', '-preset', 'medium', '-crf', String(CRF[S.quality]), ...audio, ...tail, '@OUT']);
+  const bpp = { high: 0.11, balanced: 0.065, small: 0.035 }[S.quality];
+  out.est = (outWidth(h) * h * (fps || src.fps) * bpp + ab) * d / 8;
+  out.detail = `${outWidth(h)}×${h} · size varies with content`;
+  out.h = h;
+  return out;
+}
+
+function render() {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
+  $('videoOpts').classList.toggle('hide', S.mode !== 'video');
+  $('gifOpts').classList.toggle('hide', S.mode !== 'gif');
+  document.querySelectorAll('.seg[data-key]').forEach(el => {
+    el.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === String(S[el.dataset.key])));
+  });
+  if (document.activeElement !== $('customMB')) $('customMB').value = seg('sizeMB').querySelector('.on') ? '' : S.sizeMB;
+  document.querySelectorAll('[data-show]').forEach(el => {
+    const [, k, op, v] = el.dataset.show.match(/(\w+)(!?=)(\w+)/);
+    el.classList.toggle('hide', op === '=' ? S[k] !== v : S[k] === v);
+  });
+  for (const [id, key] of Object.entries(checks)) $(id).checked = !!S[key];
+  $('goalNote').textContent = {
+    size: 'Shrinks the video to fit under the size. Two passes, so the size comes out right.',
+    quality: 'Keeps it looking good. The size depends on the video.',
+    trim: 'Cuts without re-encoding. Instant, no quality loss.',
+  }[S.goal];
+
+  renderSave();
+  if (!src) { $('exportBtn').disabled = true; $('estSize').textContent = '–'; $('estDetail').textContent = ''; return; }
+
+  seg('res').querySelectorAll('button').forEach(b => { if (+b.dataset.v) b.disabled = busy || +b.dataset.v > src.h; });
+  $('audioChk').disabled = busy || !src.audio;
+
+  const p = plan();
+  $('estSize').textContent = (p.ext === '.gif' || (S.mode === 'video' && S.goal === 'quality') ? '≈ ' : '') + mb(p.est);
+  $('estDetail').textContent = p.detail;
+  $('resNote').textContent = S.res === 'auto' && p.h ? `Auto picks ${p.h}p.` : '';
+  $('gifNote').textContent = clipDur() > 15 ? 'GIFs over ~15 s get big. Trim it shorter, or lower width or fps.' : '';
+  $('outExt').textContent = p.ext;
+  if (!nameEdited) $('outName').value = stem(src.name) + (S.mode === 'gif' ? '' : S.goal === 'trim' ? '-trim' : '-small');
+  if (!busy) { $('exportBtn').disabled = !hasFfmpeg; setStatus(p.warn || '', false, true); }
+}
+
+// ---------- Save location ----------
+// Default is the original video's folder. Picking another folder is remembered until "Video's folder" is clicked.
+function outDir() {
+  if (S.saveDir) return S.saveDir;
+  if (src && !src.temp) return src.dir;
+  return videosDir;
+}
+function renderSave() {
+  const d = outDir();
+  $('saveDir').textContent = '‎' + (d || 'Next to the original video') + '‎';
+  $('saveDir').title = d ? d + (S.saveDir ? '  (your chosen folder, remembered)' : '  (same folder as the video)') : '';
+  $('followBtn').classList.toggle('hide', !S.saveDir);
+}
+$('followBtn').onclick = () => { S.saveDir = ''; persist(); render(); };
+$('changeDir').onclick = async () => {
+  const r = await api('/api/saveas', { dir: outDir() || '', name: ($('outName').value || 'clip') + $('outExt').textContent }, '');
+  if (!r.path) return;
+  const d = dirname(r.path);
+  S.saveDir = src && !src.temp && d.toLowerCase() === src.dir.toLowerCase() ? '' : d;
+  $('outName').value = stem(basename(r.path)); nameEdited = true;
+  persist(); render();
+};
+
+// ---------- Export ----------
+let lastOut = '';
+function setStatus(msg, bad, soft) {
+  if (soft && $('status').classList.contains('bad')) return;
+  $('status').textContent = msg || '';
+  $('status').classList.toggle('bad', !!bad);
+}
+function lock(on) {
+  busy = on;
+  document.querySelectorAll('#opts button, #opts input, .tabs button, #changeDir, #followBtn, #openBtn, #outName, #setIn, #setOut, #resetTrim, #inTime, #outTime')
+    .forEach(el => el.disabled = on);
+  $('exportBtn').textContent = on ? 'Cancel' : 'Export';
+  $('exportBtn').disabled = false;
+  $('exportBtn').classList.toggle('primary', !on);
+  $('prog').classList.toggle('hide', !on);
+  $('prog').firstElementChild.style.width = '0';
+}
+
+async function exportIt() {
+  if (busy) { await api('/api/cancel', null, ''); return; }
+  if (!src) return;
+  vid.pause();
+  const p = plan();
+  const name = ($('outName').value.trim() || stem(src.name)).replace(/[<>:"/\\|?*]/g, '_');
+  let target = outDir() + '\\' + name + p.ext;
+  if (target.toLowerCase() === src.path.toLowerCase()) target = outDir() + '\\' + name + '-new' + p.ext;
+  target = (await api('/api/unique', { path: target })).path;
+  const passes = p.passes.map(a => a.map(x => x === '@OUT' ? target : x));
+  $('result').style.display = 'none';
+  setStatus('Starting…');
+  try { await api('/api/run', null, JSON.stringify({ passes, output: target, total: p.total })); }
+  catch (e) { return setStatus(e.message, true); }
+  lastOut = target;
+  lock(true);
+  const t0 = Date.now();
+  const tick = async () => {
+    let r;
+    try { r = await api('/api/progress'); } catch { r = { state: 'running', done: 0, total: 1 }; }
+    const f = r.total ? Math.min(1, r.done / r.total) : 0;
+    $('prog').firstElementChild.style.width = (f * 100).toFixed(1) + '%';
+    if (r.state === 'running') {
+      const secs = (Date.now() - t0) / 1000;
+      const eta = f > 0.03 ? Math.round(secs / f - secs) : null;
+      const pass = passes.length > 1 ? ` · pass ${f < 0.5 ? 1 : 2} of 2` : '';
+      setStatus(`${Math.round(f * 100)}%${pass}` + (eta !== null ? ` · about ${eta < 60 ? eta + ' s' : Math.ceil(eta / 60) + ' min'} left` : ''));
+      setTimeout(tick, 500);
+      return;
+    }
+    lock(false);
+    if (r.state === 'done') {
+      setStatus('');
+      const before = src.size * clipDur() / src.dur;
+      const saved = before ? Math.round((1 - r.size / before) * 100) : 0;
+      $('resultText').textContent = `✓ Saved ${basename(r.output)} · ${mb(r.size)}` + (p.ext !== '.gif' && saved > 0 ? ` (${saved}% smaller)` : '');
+      $('result').style.display = 'flex';
+    } else if (r.state === 'cancelled') setStatus('Cancelled.');
+    else setStatus('Export failed:\n' + r.error, true);
+    render();
+  };
+  tick();
+}
+$('exportBtn').onclick = exportIt;
+$('revealBtn').onclick = () => api('/api/reveal', { path: lastOut });
+$('launchBtn').onclick = () => api('/api/launch', { path: lastOut });
+$('reopenBtn').onclick = () => load(lastOut, false);
+
+// ---------- Start ----------
+(async () => {
+  const init = await api('/api/init');
+  hasFfmpeg = init.ffmpeg;
+  videosDir = init.videos;
+  if (!hasFfmpeg) $('banner').style.display = 'block';
+  try { S = { ...DEFAULTS, ...JSON.parse(init.settings || '{}') }; } catch {}
+  render();
+  checkPending();
+})();
+</script>
+</body>
+</html>
